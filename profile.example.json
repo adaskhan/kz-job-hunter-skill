@@ -1,0 +1,53 @@
+{
+  "name": "Пример: Python-разработчик, Алматы + удалёнка",
+  "keywords": ["python", "backend", "django", "fastapi"],
+  "title_only": true,
+  "title_must_match": "python|backend|back-end|бэкенд|django|fastapi",
+  "exclude_title": ["junior", "стаж[её]р", "intern", "практикант", "\\bphp\\b", "1[сc]\\b"],
+  "exclude_text": ["1[сc]-?битрикс"],
+  "exclude_companies": [],
+  "require_in_text": "python|django|fastapi",
+  "skills": ["python", "django", "fastapi", "postgresql", "docker", "kafka", "redis"],
+
+  "sources": ["hh", "enbek", "tg", "habr", "getmatch", "geekjob",
+              "remoteok", "himalayas", "wwr", "workingnomads", "remotive", "jobicy"],
+
+  "hh_sites": [
+    {"domain": "hh.kz",     "areas": [160, 159], "work_formats": ["REMOTE", "HYBRID", "ON_SITE"]},
+    {"domain": "hh.ru",     "areas": [],         "work_formats": ["REMOTE"]}
+  ],
+  "hh_sites_relocation_examples": [
+    {"domain": "hh.uz",     "areas": [97],  "work_formats": []},
+    {"domain": "rabota.by", "areas": [16],  "work_formats": []},
+    {"domain": "hh.ru",     "areas": [236], "work_formats": []},
+    {"domain": "hh.ru",     "areas": [48],  "work_formats": []}
+  ],
+  "hh_max_pages": 2,
+  "work_formats": ["REMOTE", "HYBRID", "ON_SITE"],
+  "habr_remote_only": true,
+  "getmatch_max": 300,
+  "remote_allowed_regions": "worldwide|anywhere|global|^remote$|emea|asia|apac|cis|снг|kazakhstan|казахстан|central asia|eurasia|international",
+  "max_age_days": 3,
+  "tg_max_age_days": 7,
+
+  "salary_min_kzt_net": 700000,
+  "net_ratio": 0.8,
+  "rates": {"USD": 510, "EUR": 590, "RUR": 6.3, "RUB": 6.3},
+
+  "english_level": "b1",
+  "kazakh_level": "none",
+  "is_foreigner": false,
+  "exclude_ru_only_remote": true,
+
+  "tg_channels": [
+    "devkz_jobs", "workitkz", "jobkz_1", "it_jobs_kz", "zhumysbarit", "itcom_kz", "aitujobs",
+    "devkg", "rabotavmediawe",
+    "devs_it", "myresume_ru", "youritjob", "relocatesme", "itworkhubchannel", "it_jobs_agregator", "jobfortm",
+    "forpython", "python_vakansii_jobs", "pythonrabota", "job_python"
+  ],
+  "tg_groups_browser_only": ["cyprusithr"],
+  "career_pages": [],
+  "linkedin": {"enabled": true, "location": "Kazakhstan", "remote_location": "EMEA",
+               "hashtags": ["#hiring", "#вакансия", "#открытавакансия", "#openrole", "#vacancy"]},
+  "seen_file": "~/.kz-job-hunter/seen.json"
+}
