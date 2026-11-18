@@ -71,6 +71,7 @@ Remote OK, Himalayas, We Work Remotely и ещё три remote-борда. Пл�
 ### 🎯 Подгоняет под вакансию
 Даёте ссылку — получаете таблицу «требование → есть ли в резюме → что сделать»
 и переписанные пункты словами вакансии. Только из реальных фактов, без выдумок.
+Потом собирает **PDF на одну страницу**, который ATS читает без ошибок.
 
 </td>
 </tr>
@@ -111,6 +112,8 @@ git clone https://github.com/adaskhan/kz-job-hunter-skill.git ~/.claude/skills/k
 > Прожарь моё резюме
 >
 > Подгони резюме под эту вакансию: hh.kz/vacancy/…
+>
+> Собери моё резюме в PDF
 
 Скилл задаст несколько вопросов (город, формат, зарплата, языки), соберёт профиль
 и запустит первый поиск. Дальше достаточно сказать **«запусти поиск»**.
@@ -227,6 +230,9 @@ python3 scripts/kz_jobs.py refilter --in run.json --profile profile.example.json
 # насколько резюме совпадает с вакансией (ATS)
 python3 scripts/kz_jobs.py match --resume ~/.kz-job-hunter/resume.md --url https://hh.kz/vacancy/123
 
+# собрать резюме в PDF (одна страница, проверка ATS)
+python3 scripts/build_cv.py --in ~/.kz-job-hunter/resume.md --out ~/Downloads/My_CV.pdf
+
 # отчёт в Markdown
 python3 scripts/kz_jobs.py report --in run.json --out report.md
 
@@ -283,8 +289,10 @@ python3 scripts/kz_jobs.py mark-seen --in run.json --profile profile.example.jso
 kz-job-hunter-skill/
 ├── SKILL.md                  # инструкции для Claude: онбординг, поиск, отклики
 ├── profile.example.json      # шаблон профиля
+├── resume.example.md         # шаблон резюме для сборки PDF
 ├── scripts/
-│   └── kz_jobs.py            # сборщик и фильтры, только stdlib
+│   ├── kz_jobs.py            # сборщик и фильтры, только stdlib
+│   └── build_cv.py           # резюме из Markdown → PDF на одну страницу
 └── references/
     ├── platforms.md          # все источники и как с ними работать
     ├── cv-review.md          # разбор резюме, ATS, подгонка под вакансию
