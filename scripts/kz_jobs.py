@@ -212,8 +212,8 @@ def hh_details(vac, log):
     vac["key_skills"] = v.get("keySkills") or []
     if v.get("languages"):
         vac["languages"] = [{"code": l.get("isoCode"), "level": l.get("degree")} for l in v["languages"]]
-    if v.get("closedForApplicants"):
-        vac["closed"] = True
+    if v.get("closedForApplicants") or (v.get("status") or {}).get("archived"):
+        vac["closed"] = True  # закрыта для откликов или уже в архиве
     return vac
 
 
