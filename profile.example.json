@@ -49,5 +49,6 @@
   "career_pages": [],
   "linkedin": {"enabled": true, "location": "Kazakhstan", "remote_location": "EMEA",
                "hashtags": ["#hiring", "#вакансия", "#открытавакансия", "#openrole", "#vacancy"]},
+  "schedule": "",
   "seen_file": "~/.kz-job-hunter/seen.json"
 }
