@@ -13,6 +13,7 @@ kz_jobs.py — сборщик вакансий для Казахстана (бе
   python3 kz_jobs.py search  --profile profile.json --out run.json [--sources hh,enbek,tg] [--details]
   python3 kz_jobs.py report  --in run.json --out report.md
   python3 kz_jobs.py refilter --in run.json --profile profile.json   # перефильтровать без запросов
+  python3 kz_jobs.py match --resume resume.md --url https://hh.kz/vacancy/123   # ATS-совпадение с вакансией
   python3 kz_jobs.py mark-seen --in run.json --profile profile.json   # записать найденное в историю
 
 Скрипт ничего не отправляет работодателям — только читает публичные страницы.
@@ -205,6 +206,8 @@ def hh_details(vac, log):
     except Exception as e:  # noqa: BLE001
         log.append(f"{vac['source']} детали {vid}: {e}")
         return vac
+    if not vac.get("title"):
+        vac["title"] = v.get("name", "")
     vac["description"] = strip_html(v.get("description"))
     vac["key_skills"] = v.get("keySkills") or []
     if v.get("languages"):
@@ -650,6 +653,63 @@ DEFAULT_REMOTE_REGIONS = (r"worldwide|anywhere|global|^remote$|emea|asia|apac|ci
                           r"central asia|eurasia|all countries|international")
 
 
+# ───────────────────────── ATS-совпадение с резюме ─────────────────────────
+
+# Канонические названия технологий → регулярка синонимов. Используется и для вакансии, и для резюме.
+TECH_TERMS = {
+    "Python": r"python", "Django": r"django(?!\s*rest)", "DRF": r"\bdrf\b|django\s*rest", "FastAPI": r"fast\s*api",
+    "Flask": r"\bflask\b", "asyncio": r"asyncio|async\s*/?\s*await|асинхронн", "SQLAlchemy": r"sqlalchemy",
+    "Pydantic": r"pydantic", "Celery": r"celery", "aiohttp": r"aiohttp",
+    "PostgreSQL": r"postgre(s|sql)?\b|\bpg\b", "MySQL": r"mysql", "MongoDB": r"mongo", "ClickHouse": r"clickhouse",
+    "Redis": r"\bredis\b", "Elasticsearch": r"elastic\s*search|\belk\b", "RabbitMQ": r"rabbit\s*mq|\brabbit\b",
+    "Kafka": r"\bkafka\b", "gRPC": r"\bgrpc\b", "GraphQL": r"graphql", "REST API": r"\brest\b|restful",
+    "WebSocket": r"web\s*sockets?", "Microservices": r"micro-?services?|микросервис",
+    "Docker": r"docker", "Kubernetes": r"kubernetes|\bk8s\b", "Helm": r"\bhelm\b", "Terraform": r"terraform",
+    "AWS": r"\baws\b|amazon\s+web", "GCP": r"\bgcp\b|google\s+cloud", "Azure": r"\bazure\b",
+    "Linux": r"linux", "Nginx": r"nginx", "CI/CD": r"ci\s*/\s*cd|gitlab\s*ci|github\s+actions|jenkins",
+    "Git": r"\bgit\b", "Prometheus": r"prometheus", "Grafana": r"grafana", "Sentry": r"sentry",
+    "OpenTelemetry": r"opentelemetry|jaeger", "pytest": r"pytest", "Unit tests": r"unit[\s-]?test|юнит[\s-]?тест|модульн[а-я]*\s+тест|pytest|unittest|автотест|automated\s+tests?|test\s+cases?",
+    "Airflow": r"airflow", "Spark": r"\bspark\b", "Pandas": r"pandas", "LLM": r"\bllm|gpt|openai|langchain|\brag\b",
+    "Highload": r"high[\s-]?load|высоконагруж", "Payments": r"payment|платеж|платёж|эквайринг",
+    "E-commerce": r"e-?commerce|маркетплейс|marketplace|интернет[\s-]магазин",
+    "Go": r"\bgolang\b|\bgo\b(?=\s*(developer|разработ|,|/|\)))", "Java": r"\bjava\b(?!script)", "Node.js": r"node\.?\s?js",
+    "TypeScript": r"typescript", "JavaScript": r"javascript|\bjs\b", "React": r"\breact\b", "Next.js": r"next\.?js",
+    "C#": r"c#|\.net", "PHP": r"\bphp\b", "Kotlin": r"kotlin", "C++": r"c\+\+",
+}
+TECH_RE = {k: re.compile(v, re.I) for k, v in TECH_TERMS.items()}
+
+
+def tech_terms(text):
+    return {k for k, rx in TECH_RE.items() if rx.search(text or "")}
+
+
+def load_resume(profile):
+    path = os.path.expanduser(profile.get("resume_file", "~/.kz-job-hunter/resume.md"))
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def ats_match(v, resume_text, resume_terms=None):
+    """Какие требования вакансии (ключевые навыки + технологии из текста) есть в резюме."""
+    resume_terms = resume_terms if resume_terms is not None else tech_terms(resume_text)
+    low = resume_text.lower()
+    need, extra = set(), []
+    for ks in v.get("key_skills") or []:
+        t = tech_terms(ks)
+        if t:
+            need |= t
+        elif re.search(r"[a-z]", ks, re.I) and len(ks) <= 30:
+            extra.append(ks)  # латинский навык вне словаря (Camunda, 1C-Bitrix…) — ищем как есть
+    need |= tech_terms(f"{v.get('title','')}\n{v.get('description') or v.get('snippet') or ''}")
+    have = sorted(t for t in need if t in resume_terms) + [e for e in extra if e.lower() in low]
+    missing = sorted(t for t in need if t not in resume_terms) + [e for e in extra if e.lower() not in low]
+    total = len(have) + len(missing)
+    return {"pct": round(100 * len(have) / total) if total else None, "have": have, "missing": missing}
+
+
 # ───────────────────────── фильтры ─────────────────────────
 
 def salary_kzt_net(sal, profile):
@@ -778,6 +838,9 @@ def score(v, profile):
         s += 1
     if "REMOTE" in (v.get("work_formats") or []) and "REMOTE" in profile.get("work_formats", []):
         s += 1
+    pct = (v.get("ats") or {}).get("pct")
+    if pct is not None:
+        s += round(pct / 10)
     return s
 
 
@@ -846,9 +909,12 @@ def cmd_search(a):
 
 def write_run(out_path, profile, pool, seen, log):
     buckets = {"keep": [], "flag": [], "drop": []}
+    resume = load_resume(profile)
+    resume_terms = tech_terms(resume)
     for v in pool:
         kind, why = classify(v, profile, seen)
         v["reasons"] = why
+        v["ats"] = ats_match(v, resume, resume_terms) if resume and kind != "drop" else None
         v["score"] = score(v, profile)
         v["salary_text"] = fmt_salary(v.get("salary"))
         buckets[kind].append(v)
@@ -878,6 +944,14 @@ MONTHS = ["января", "февраля", "марта", "апреля", "ма�
           "сентября", "октября", "ноября", "декабря"]
 
 
+def ats_text(v):
+    a = v.get("ats") or {}
+    if a.get("pct") is None:
+        return "—"
+    miss = ", ".join(a["missing"][:3])
+    return f"{a['pct']}%" + (f" · нет: {miss}" if miss else "")
+
+
 def md_row(v, extra):
     title = v["title"].replace("|", "/").replace("[", "(").replace("]", ")")
     fmt = ", ".join(HH_WORK_FORMAT_RU.get(x, x) for x in v.get("work_formats") or []) or "—"
@@ -893,10 +967,10 @@ def cmd_report(a):
     L = [f"# Вакансии в Казахстане — {now.day} {MONTHS[now.month-1]} {now.year}", "",
          f"Подходящих: **{len(run['keep'])}**, с оговорками: **{len(run['flag'])}**, "
          f"отсеяно: {len(run['drop'])}.", "",
-         f"## ✅ Подходят [{len(run['keep'])}]", "", head.format("Совпадений")]
-    L += [md_row(v, v["score"]) for v in run["keep"]] or ["| — | | | | | | |"]
+         f"## ✅ Подходят [{len(run['keep'])}]", "", head.format("ATS-совпадение с резюме")]
+    L += [md_row(v, ats_text(v)) for v in run["keep"]] or ["| — | | | | | | |"]
     L += ["", f"## ⚠️ С оговорками [{len(run['flag'])}]", "", head.format("Почему")]
-    L += [md_row(v, "; ".join(v["reasons"])) for v in run["flag"]] or ["| — | | | | | | |"]
+    L += [md_row(v, "; ".join(v["reasons"]) + f" · ATS {ats_text(v)}") for v in run["flag"]] or ["| — | | | | | | |"]
     reasons = {}
     for v in run["drop"]:
         for r in v["reasons"][:1]:
@@ -923,6 +997,30 @@ def cmd_mark_seen(a):
     print(f"{len(seen)} id в истории: {p}")
 
 
+def cmd_match(a):
+    """ATS-совпадение резюме с одной вакансией: hh-ссылка, любая ссылка или текстовый файл."""
+    resume = open(os.path.expanduser(a.resume)).read()
+    if a.url and re.search(r"(hh\.(kz|ru|uz)|rabota\.by)/vacancy/(\d+)", a.url):
+        vid = re.search(r"/vacancy/(\d+)", a.url).group(1)
+        dom = re.search(r"https?://([^/]+)", a.url).group(1)
+        v = {"id": f"hh:{vid}", "url": f"https://{dom}/vacancy/{vid}", "source": dom, "title": ""}
+        log = []
+        hh_details(v, log)
+        if log:
+            sys.exit(log[0])
+    elif a.url:
+        page = fetch(a.url)
+        t = re.search(r"<title>(.*?)</title>", page, re.S)
+        page = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", page, flags=re.S | re.I)
+        v = {"title": strip_html(t.group(1)) if t else a.url, "description": strip_html(page), "url": a.url}
+    else:
+        v = {"title": "", "description": open(os.path.expanduser(a.text)).read()}
+    res = ats_match(v, resume)
+    res["title"] = v.get("title")
+    res["key_skills"] = v.get("key_skills") or []
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -937,6 +1035,12 @@ def main():
     r.add_argument("--in", dest="inp", required=True)
     r.add_argument("--out", default="report.md")
     r.set_defaults(fn=cmd_report)
+    mt = sub.add_parser("match", help="ATS-совпадение резюме с вакансией")
+    mt.add_argument("--resume", default="~/.kz-job-hunter/resume.md")
+    g = mt.add_mutually_exclusive_group(required=True)
+    g.add_argument("--url", help="ссылка на вакансию (hh.kz/hh.ru — точнее, по ключевым навыкам)")
+    g.add_argument("--text", help="файл с текстом вакансии")
+    mt.set_defaults(fn=cmd_match)
     rf = sub.add_parser("refilter", help="перепроверить прогон с текущим профилем без запросов к сайтам")
     rf.add_argument("--in", dest="inp", required=True)
     rf.add_argument("--profile", required=True)
